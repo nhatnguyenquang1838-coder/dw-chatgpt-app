@@ -1,5 +1,7 @@
 # DW SUPER ChatGPT App — Complete MVP
 
+> Triggered by Vercel for main-only deployment.
+
 This package is a complete prototype for a **DW SUPER Governance Cockpit inside ChatGPT**.
 
 It is designed for the exact interaction model requested:
