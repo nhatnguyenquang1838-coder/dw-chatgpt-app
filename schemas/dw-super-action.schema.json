@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DW SUPER Chat Action",
+  "type": "object",
+  "properties": {
+    "action": {
+      "enum": [
+        "continue_gate",
+        "approve_gate",
+        "show_evidence",
+        "explain_risk",
+        "prepare_slack_update",
+        "reject_gate"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "risk": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "approval_token": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "action",
+    "task_id",
+    "gate"
+  ]
+}

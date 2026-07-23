@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DW SUPER Approval",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "risk": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "approval_token": {
+      "type": "string"
+    },
+    "expires_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "task_id",
+    "gate",
+    "approval_token",
+    "scope_hash"
+  ]
+}

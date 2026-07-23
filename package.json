@@ -1,0 +1,23 @@
+{
+  "name": "dw-super-chatgpt-app",
+  "version": "1.0.0",
+  "description": "DW SUPER Governance Cockpit for ChatGPT Apps SDK",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "preview": "python3 -m http.server 8787 -d public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.16.0",
+    "@modelcontextprotocol/ext-apps": "^0.1.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

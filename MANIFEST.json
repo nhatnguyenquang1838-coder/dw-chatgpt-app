@@ -1,0 +1,87 @@
+{
+  "format": "dw-super-chatgpt-app-complete-v1",
+  "created_at_utc": "2026-07-23T18:31:46Z",
+  "purpose": "Complete ChatGPT App prototype for DW SUPER governance cockpit",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2418,
+      "sha256": "c38d3c185d08dae396492be6cf0cd4cc747347677d740d1614bd2821d56d5e1a"
+    },
+    {
+      "path": "docs/CHATGPT_APP_BEHAVIOR.md",
+      "bytes": 936,
+      "sha256": "864fac011eedc95f502ddd07ccc804c525c04b72eb8d82d6c31aea4764240409"
+    },
+    {
+      "path": "docs/INSTALL.md",
+      "bytes": 674,
+      "sha256": "6563f2b11049d133f5a0dd2e5d0049cc5c98a89a462b7a13dbba5cfb196635cf"
+    },
+    {
+      "path": "docs/PROJECT_INSTRUCTION.md",
+      "bytes": 2049,
+      "sha256": "a084e207c045cf018b78a29c51bbbf71124a2c31afa5b84e139a473af80da2c1"
+    },
+    {
+      "path": "docs/SLACK_COMMUNICATION_POLICY_CANVAS.md",
+      "bytes": 1392,
+      "sha256": "e27b8d0ee4126037d117b67cc31d6dcb473a55000c10583aef5d3985f40aa212"
+    },
+    {
+      "path": "fixtures/sample-task-state.json",
+      "bytes": 2105,
+      "sha256": "74d17679de92cc667b50d3b01f371986d9b793ba9e4d8542ae309d178cc7be75"
+    },
+    {
+      "path": "package.json",
+      "bytes": 552,
+      "sha256": "dde287fdd984e4c4b97cba00717e6aad08f858d54558d49e6811b30a3c2ac3b4"
+    },
+    {
+      "path": "public/preview.html",
+      "bytes": 17748,
+      "sha256": "ab79abab26386ca5d5962ba43923e5ab3a737beaa0b3268117c2e9f14acc0d33"
+    },
+    {
+      "path": "public/sample-execution-report.html",
+      "bytes": 2918,
+      "sha256": "5e4f1ee8e667f6b2b18ff916fddd6cefbf628dc468b5cb474dc0ef8f50968bd0"
+    },
+    {
+      "path": "schemas/approval.schema.json",
+      "bytes": 547,
+      "sha256": "a2fc8ae1bb08efe0e2894b19f833d500d949e597b2f07686770d3c753b7c758c"
+    },
+    {
+      "path": "schemas/dw-super-action.schema.json",
+      "bytes": 686,
+      "sha256": "64010045315f0871e3f5fd908f02173e89c98423dfe59d7c0cb0b2030f03ea64"
+    },
+    {
+      "path": "schemas/task-state.schema.json",
+      "bytes": 708,
+      "sha256": "c0467da59a84850bbcaa632701483f9f612d1c28e76c7c9698c4ac22cf304c53"
+    },
+    {
+      "path": "src/sample-state.ts",
+      "bytes": 2142,
+      "sha256": "602e3cb38423f465fbdf2107fb45c27c2665ee6e1d9f0d8d1ebab94a0638fbee"
+    },
+    {
+      "path": "src/server.ts",
+      "bytes": 21146,
+      "sha256": "d00f1b0f9c8c2952dede3d5915aaa07a2d0f901e8545ecece77670aedcef340d"
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 304,
+      "sha256": "c4ba6474456c97ae29ba7f6c0bdc1616aa58ab4d7b4af8f3747c1661000ea9c1"
+    },
+    {
+      "path": "widget/dw-super-cockpit.html",
+      "bytes": 16957,
+      "sha256": "9b1b9530172b2f8e5c3597be296c446614b231e084177e85d19df6beaeee0078"
+    }
+  ]
+}

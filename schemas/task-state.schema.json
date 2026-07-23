@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DW SUPER Task State",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "current_gate": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "risk": {
+      "type": "string"
+    },
+    "health": {
+      "type": "number"
+    },
+    "repositories": {
+      "type": "array"
+    },
+    "risks": {
+      "type": "array"
+    },
+    "timeline": {
+      "type": "array"
+    }
+  },
+  "required": [
+    "project",
+    "task_id",
+    "run_id",
+    "current_gate",
+    "status"
+  ]
+}
