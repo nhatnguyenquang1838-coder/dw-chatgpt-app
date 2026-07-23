@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.gitmodules
+.vite
+*.local
+coverage
+.nyc_output
