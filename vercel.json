@@ -7,9 +7,7 @@
     }
   },
   "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
+    "deploymentEnabled": true
   },
   "headers": [
     {
