@@ -1,6 +1,11 @@
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE
+} from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod/v3";
+import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -92,29 +97,59 @@ const sampleState = {
   ]
 };
 
-function createServer(): McpServer {
-  const server = new McpServer(
-    { name: "DW SUPER Governance Cockpit", version: "1.0.1" },
-    { capabilities: { tools: {}, resources: {} } }
-  );
+const approvalSchema = z.object({
+  gate: z.string(),
+  token: z.string(),
+  label: z.string(),
+  expires_at_utc: z.string()
+});
 
-  server.registerResource(
-    "dw_super_cockpit_widget",
+const repositorySchema = z.object({
+  name: z.string(),
+  branch: z.string(),
+  sha: z.string(),
+  status: z.string()
+});
+
+const riskSchema = z.object({
+  level: z.string(),
+  title: z.string(),
+  detail: z.string()
+});
+
+const timelineSchema = z.object({
+  time: z.string(),
+  status: z.string(),
+  event: z.string()
+});
+
+function createServer(): McpServer {
+  const server = new McpServer({
+    name: "DW SUPER Governance Cockpit",
+    version: "1.1.0"
+  });
+
+  registerAppResource(
+    server,
+    "DW SUPER Governance Cockpit",
     TEMPLATE_URI,
-    {},
+    {
+      mimeType: RESOURCE_MIME_TYPE,
+      description: "Interactive DW SUPER governance cockpit for ChatGPT."
+    },
     async () => ({
       contents: [
         {
           uri: TEMPLATE_URI,
-          mimeType: "text/html+skybridge",
+          mimeType: RESOURCE_MIME_TYPE,
           text: widgetHtml,
           _meta: {
-            "openai/widgetDescription":
-              "DW SUPER governance cockpit with gate status, evidence, risks, and tokenized approval actions.",
-            "openai/widgetPrefersBorder": true,
-            "openai/widgetCSP": {
-              connect_domains: [],
-              resource_domains: []
+            ui: {
+              csp: {
+                connectDomains: [],
+                resourceDomains: []
+              },
+              prefersBorder: true
             }
           }
         }
@@ -122,14 +157,15 @@ function createServer(): McpServer {
     })
   );
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "get_dw_super_state",
     {
       title: "Get DW SUPER state",
       description:
-        "Returns the current DW SUPER governance state and renders the cockpit widget.",
-      inputSchema: z.object({}),
-      outputSchema: z.object({
+        "Returns the current DW SUPER governance state and renders the interactive cockpit.",
+      inputSchema: {},
+      outputSchema: {
         project: z.string(),
         task_id: z.string(),
         run_id: z.string(),
@@ -138,11 +174,11 @@ function createServer(): McpServer {
         risk: z.string(),
         health: z.number(),
         scope_hash: z.string(),
-        approval: z.object({}).passthrough(),
-        repositories: z.array(z.object({}).passthrough()),
-        risks: z.array(z.object({}).passthrough()),
-        timeline: z.array(z.object({}).passthrough())
-      }),
+        approval: approvalSchema,
+        repositories: z.array(repositorySchema),
+        risks: z.array(riskSchema),
+        timeline: z.array(timelineSchema)
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -150,32 +186,32 @@ function createServer(): McpServer {
         openWorldHint: false
       },
       _meta: {
-        ui: { resourceUri: TEMPLATE_URI },
-        "openai/outputTemplate": TEMPLATE_URI,
-        "openai/widgetAccessible": true,
-        "openai/toolInvocation/invoking": "Loading DW SUPER…",
-        "openai/toolInvocation/invoked": "DW SUPER loaded"
+        ui: {
+          resourceUri: TEMPLATE_URI,
+          visibility: ["model", "app"]
+        }
       }
     },
     async () => ({
       structuredContent: sampleState,
       content: [
         {
-          type: "text",
+          type: "text" as const,
           text:
-            "DW SUPER governance cockpit loaded. Use the widget buttons to send model-visible actions into this conversation."
+            "DW SUPER governance cockpit loaded. The widget can send model-visible actions into this conversation."
         }
       ]
     })
   );
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "record_dw_super_action",
     {
       title: "Prepare DW SUPER action intent",
       description:
         "Returns a model-visible DW SUPER action intent. This MVP does not mutate GitHub, GWC, Slack, or audit state.",
-      inputSchema: z.object({
+      inputSchema: {
         action: z.enum([
           "continue_gate",
           "approve_gate",
@@ -190,14 +226,14 @@ function createServer(): McpServer {
         risk: z.string().optional(),
         scope_hash: z.string().optional(),
         approval_token: z.string().optional()
-      }),
-      outputSchema: z.object({
+      },
+      outputSchema: {
         accepted: z.boolean(),
         action: z.string(),
         task_id: z.string(),
         gate: z.string(),
         message: z.string()
-      }),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -205,32 +241,37 @@ function createServer(): McpServer {
         openWorldHint: false
       },
       _meta: {
-        "openai/widgetAccessible": true,
-        "openai/toolInvocation/invoking": "Preparing DW SUPER action…",
-        "openai/toolInvocation/invoked": "DW SUPER action prepared"
+        ui: {
+          resourceUri: TEMPLATE_URI,
+          visibility: ["model", "app"]
+        }
       }
     },
-    async (input) => ({
-      structuredContent: {
-        accepted: true,
-        action: input.action,
-        task_id: input.task_id,
-        gate: input.gate,
-        message:
-          input.action === "approve_gate"
-            ? `Approval intent received with token ${input.approval_token ?? "missing"}.`
-            : `DW SUPER action intent received: ${input.action}.`
-      },
-      content: [
-        {
-          type: "text",
-          text:
-            input.action === "approve_gate"
-              ? `🟢 Approval intent received for ${input.gate}. Token: ${input.approval_token ?? "missing"}.`
-              : `🔵 DW SUPER action received: ${input.action}.`
-        }
-      ]
-    })
+    async (input) => {
+      const message =
+        input.action === "approve_gate"
+          ? `Approval intent received with token ${input.approval_token ?? "missing"}.`
+          : `DW SUPER action intent received: ${input.action}.`;
+
+      return {
+        structuredContent: {
+          accepted: true,
+          action: input.action,
+          task_id: input.task_id,
+          gate: input.gate,
+          message
+        },
+        content: [
+          {
+            type: "text" as const,
+            text:
+              input.action === "approve_gate"
+                ? `🟢 Approval intent received for ${input.gate}. Token: ${input.approval_token ?? "missing"}.`
+                : `🔵 DW SUPER action received: ${input.action}.`
+          }
+        ]
+      };
+    }
   );
 
   return server;
@@ -238,7 +279,7 @@ function createServer(): McpServer {
 
 function setCorsHeaders(res: any): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Accept, Authorization, MCP-Protocol-Version, MCP-Session-Id"
@@ -247,19 +288,6 @@ function setCorsHeaders(res: any): void {
     "Access-Control-Expose-Headers",
     "MCP-Protocol-Version, MCP-Session-Id"
   );
-}
-
-function sendJsonRpcError(
-  res: any,
-  status: number,
-  code: number,
-  message: string
-): void {
-  res.status(status).json({
-    jsonrpc: "2.0",
-    error: { code, message },
-    id: null
-  });
 }
 
 export default async function handler(req: any, res: any): Promise<void> {
@@ -271,46 +299,36 @@ export default async function handler(req: any, res: any): Promise<void> {
     return;
   }
 
-  // Stateless Streamable HTTP does not expose a server-initiated SSE stream.
-  // MCP requires GET to return 405 when that stream is unsupported.
-  if (req.method === "GET" || req.method === "HEAD") {
-    res.setHeader("Allow", "POST, OPTIONS");
-    sendJsonRpcError(res, 405, -32000, "SSE stream not supported");
+  if (!req.method || !["POST", "GET", "DELETE"].includes(req.method)) {
+    res.setHeader("Allow", "GET, POST, DELETE, OPTIONS");
+    res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST, OPTIONS");
-    sendJsonRpcError(res, 405, -32600, "Method not allowed");
-    return;
-  }
+  const server = createServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true
+  });
 
-  const contentType = String(req.headers?.["content-type"] ?? "").toLowerCase();
-  if (!contentType.includes("application/json")) {
-    sendJsonRpcError(
-      res,
-      415,
-      -32600,
-      "Content-Type must be application/json"
-    );
-    return;
-  }
+  res.on("close", () => {
+    transport.close();
+    server.close();
+  });
 
   try {
-    const body =
-      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-
-    const server = createServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined
-    });
-
     await server.connect(transport);
-    await transport.handleRequest(req, res, body);
+
+    if (req.method === "POST") {
+      await transport.handleRequest(req, res, req.body);
+      return;
+    }
+
+    await transport.handleRequest(req, res);
   } catch (error) {
     console.error("MCP request failed", error);
     if (!res.headersSent) {
-      sendJsonRpcError(res, 500, -32603, "Internal MCP server error");
+      res.status(500).json({ error: "Internal MCP server error" });
     }
   }
 }
