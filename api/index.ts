@@ -31,26 +31,70 @@ const sampleState = {
     expires_at_utc: "2026-07-24T17:17:30Z"
   },
   repositories: [
-    { name: "DW-SuperApps", branch: "main", sha: "6332c8f62614d581c45403cb5e3e0c4f528cbd70", status: "verified" },
-    { name: "rental_home", branch: "main", sha: "88fb343c0f354661f9c2e309afe920de70b6a9a9", status: "warning" },
-    { name: "gwc", branch: "main", sha: "b3edbb102fb5b0e7e1532e221d89c16896f17755", status: "verified" },
-    { name: "Understand-Anything", branch: "main", sha: "6ae71878beb50226a1e4b7e2f52ac6468c86f74b", status: "warning" }
+    {
+      name: "DW-SuperApps",
+      branch: "main",
+      sha: "6332c8f62614d581c45403cb5e3e0c4f528cbd70",
+      status: "verified"
+    },
+    {
+      name: "rental_home",
+      branch: "main",
+      sha: "88fb343c0f354661f9c2e309afe920de70b6a9a9",
+      status: "warning"
+    },
+    {
+      name: "gwc",
+      branch: "main",
+      sha: "b3edbb102fb5b0e7e1532e221d89c16896f17755",
+      status: "verified"
+    },
+    {
+      name: "Understand-Anything",
+      branch: "main",
+      sha: "6ae71878beb50226a1e4b7e2f52ac6468c86f74b",
+      status: "warning"
+    }
   ],
   risks: [
-    { level: "high", title: "Stale governance package", detail: "Generated governance packages need regeneration before execution." },
-    { level: "high", title: "Old .gwc/gwc assumption", detail: "Some instructions still point to nested GWC path." },
-    { level: "medium", title: "UA metadata drift", detail: "Existing UA graph metadata is stale against current target main." }
+    {
+      level: "high",
+      title: "Stale governance package",
+      detail: "Generated governance packages need regeneration before execution."
+    },
+    {
+      level: "high",
+      title: "Old .gwc/gwc assumption",
+      detail: "Some instructions still point to nested GWC path."
+    },
+    {
+      level: "medium",
+      title: "UA metadata drift",
+      detail: "Existing UA graph metadata is stale against current target main."
+    }
   ],
   timeline: [
-    { time: "2026-07-23T17:00:00Z", status: "done", event: "Repository state loaded" },
-    { time: "2026-07-23T17:08:00Z", status: "done", event: "G0 inspection completed" },
-    { time: "2026-07-23T17:17:30Z", status: "pending", event: "G1 approval requested" }
+    {
+      time: "2026-07-23T17:00:00Z",
+      status: "done",
+      event: "Repository state loaded"
+    },
+    {
+      time: "2026-07-23T17:08:00Z",
+      status: "done",
+      event: "G0 inspection completed"
+    },
+    {
+      time: "2026-07-23T17:17:30Z",
+      status: "pending",
+      event: "G1 approval requested"
+    }
   ]
 };
 
 function createServer(): McpServer {
   const server = new McpServer(
-    { name: "DW SUPER Governance Cockpit", version: "1.0.0" },
+    { name: "DW SUPER Governance Cockpit", version: "1.0.1" },
     { capabilities: { tools: {}, resources: {} } }
   );
 
@@ -65,9 +109,13 @@ function createServer(): McpServer {
           mimeType: "text/html+skybridge",
           text: widgetHtml,
           _meta: {
-            "openai/widgetDescription": "DW SUPER governance cockpit with gate status, evidence, risks, and tokenized approval actions.",
+            "openai/widgetDescription":
+              "DW SUPER governance cockpit with gate status, evidence, risks, and tokenized approval actions.",
             "openai/widgetPrefersBorder": true,
-            "openai/widgetCSP": { connect_domains: [], resource_domains: [] }
+            "openai/widgetCSP": {
+              connect_domains: [],
+              resource_domains: []
+            }
           }
         }
       ]
@@ -78,7 +126,9 @@ function createServer(): McpServer {
     "get_dw_super_state",
     {
       title: "Get DW SUPER state",
-      description: "Returns the current DW SUPER governance state and renders the cockpit widget.",
+      description:
+        "Returns the current DW SUPER governance state and renders the cockpit widget.",
+      inputSchema: z.object({}),
       outputSchema: z.object({
         project: z.string(),
         task_id: z.string(),
@@ -96,11 +146,13 @@ function createServer(): McpServer {
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: false
       },
       _meta: {
         ui: { resourceUri: TEMPLATE_URI },
         "openai/outputTemplate": TEMPLATE_URI,
+        "openai/widgetAccessible": true,
         "openai/toolInvocation/invoking": "Loading DW SUPER…",
         "openai/toolInvocation/invoked": "DW SUPER loaded"
       }
@@ -110,7 +162,8 @@ function createServer(): McpServer {
       content: [
         {
           type: "text",
-          text: "DW SUPER governance cockpit loaded. Use the widget buttons to send model-visible actions into this conversation."
+          text:
+            "DW SUPER governance cockpit loaded. Use the widget buttons to send model-visible actions into this conversation."
         }
       ]
     })
@@ -119,8 +172,9 @@ function createServer(): McpServer {
   server.registerTool(
     "record_dw_super_action",
     {
-      title: "Record DW SUPER action intent",
-      description: "Records a user action intent from the DW SUPER cockpit. This MVP records intent only.",
+      title: "Prepare DW SUPER action intent",
+      description:
+        "Returns a model-visible DW SUPER action intent. This MVP does not mutate GitHub, GWC, Slack, or audit state.",
       inputSchema: z.object({
         action: z.enum([
           "continue_gate",
@@ -145,9 +199,15 @@ function createServer(): McpServer {
         message: z.string()
       }),
       annotations: {
-        readOnlyHint: false,
+        readOnlyHint: true,
         destructiveHint: false,
+        idempotentHint: true,
         openWorldHint: false
+      },
+      _meta: {
+        "openai/widgetAccessible": true,
+        "openai/toolInvocation/invoking": "Preparing DW SUPER action…",
+        "openai/toolInvocation/invoked": "DW SUPER action prepared"
       }
     },
     async (input) => ({
@@ -176,30 +236,70 @@ function createServer(): McpServer {
   return server;
 }
 
+function setCorsHeaders(res: any): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Accept, Authorization, MCP-Protocol-Version, MCP-Session-Id"
+  );
+  res.setHeader(
+    "Access-Control-Expose-Headers",
+    "MCP-Protocol-Version, MCP-Session-Id"
+  );
+}
+
+function sendJsonRpcError(
+  res: any,
+  status: number,
+  code: number,
+  message: string
+): void {
+  res.status(status).json({
+    jsonrpc: "2.0",
+    error: { code, message },
+    id: null
+  });
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
+  setCorsHeaders(res);
+  res.setHeader("Cache-Control", "no-store");
+
   if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
   }
 
-  if (req.method === "GET") {
-    res.status(200).json({
-      service: "DW SUPER MCP",
-      status: "ok",
-      endpoint: "/mcp",
-      transport: "streamable-http-stateless"
-    });
+  // Stateless Streamable HTTP does not expose a server-initiated SSE stream.
+  // MCP requires GET to return 405 when that stream is unsupported.
+  if (req.method === "GET" || req.method === "HEAD") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    sendJsonRpcError(res, 405, -32000, "SSE stream not supported");
     return;
   }
 
   if (req.method !== "POST") {
-    res.setHeader("Allow", "GET, POST, OPTIONS");
-    res.status(405).json({ error: "method_not_allowed" });
+    res.setHeader("Allow", "POST, OPTIONS");
+    sendJsonRpcError(res, 405, -32600, "Method not allowed");
+    return;
+  }
+
+  const contentType = String(req.headers?.["content-type"] ?? "").toLowerCase();
+  if (!contentType.includes("application/json")) {
+    sendJsonRpcError(
+      res,
+      415,
+      -32600,
+      "Content-Type must be application/json"
+    );
     return;
   }
 
   try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+
     const server = createServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined
@@ -210,7 +310,7 @@ export default async function handler(req: any, res: any): Promise<void> {
   } catch (error) {
     console.error("MCP request failed", error);
     if (!res.headersSent) {
-      res.status(500).json({ error: "mcp_request_failed" });
+      sendJsonRpcError(res, 500, -32603, "Internal MCP server error");
     }
   }
 }
