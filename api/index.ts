@@ -1,8 +1,3 @@
-import {
-  registerAppResource,
-  registerAppTool,
-  RESOURCE_MIME_TYPE
-} from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -10,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const TEMPLATE_URI = "ui://dw-super/cockpit.html";
+const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
 const widgetHtml = fs.readFileSync(
   path.join(process.cwd(), "widget", "dw-super-cockpit.html"),
@@ -129,9 +125,8 @@ function createServer(): McpServer {
     version: "1.1.0"
   });
 
-  registerAppResource(
-    server,
-    "DW SUPER Governance Cockpit",
+  server.registerResource(
+    "dw_super_cockpit_widget",
     TEMPLATE_URI,
     {
       mimeType: RESOURCE_MIME_TYPE,
@@ -157,8 +152,7 @@ function createServer(): McpServer {
     })
   );
 
-  registerAppTool(
-    server,
+  server.registerTool(
     "get_dw_super_state",
     {
       title: "Get DW SUPER state",
@@ -187,8 +181,7 @@ function createServer(): McpServer {
       },
       _meta: {
         ui: {
-          resourceUri: TEMPLATE_URI,
-          visibility: ["model", "app"]
+          resourceUri: TEMPLATE_URI
         }
       }
     },
@@ -204,8 +197,7 @@ function createServer(): McpServer {
     })
   );
 
-  registerAppTool(
-    server,
+  server.registerTool(
     "record_dw_super_action",
     {
       title: "Prepare DW SUPER action intent",
@@ -242,8 +234,7 @@ function createServer(): McpServer {
       },
       _meta: {
         ui: {
-          resourceUri: TEMPLATE_URI,
-          visibility: ["model", "app"]
+          resourceUri: TEMPLATE_URI
         }
       }
     },
