@@ -1,16 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod/v3";
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_URI = "ui://dw-super/cockpit.html";
 
 const widgetHtml = fs.readFileSync(
-  path.join(__dirname, "..", "widget", "dw-super-cockpit.html"),
+  path.join(process.cwd(), "widget", "dw-super-cockpit.html"),
   "utf-8"
 );
 
@@ -51,132 +48,169 @@ const sampleState = {
   ]
 };
 
-const server = new McpServer(
-  { name: "DW SUPER Governance Cockpit", version: "1.0.0" },
-  { capabilities: { tools: {}, resources: {} } }
-);
+function createServer(): McpServer {
+  const server = new McpServer(
+    { name: "DW SUPER Governance Cockpit", version: "1.0.0" },
+    { capabilities: { tools: {}, resources: {} } }
+  );
 
-server.registerResource(
-  "dw_super_cockpit_widget",
-  TEMPLATE_URI,
-  {},
-  async () => ({
-    contents: [
-      {
-        uri: TEMPLATE_URI,
-        mimeType: "text/html+skybridge",
-        text: widgetHtml,
-        _meta: {
-          "openai/widgetDescription": "DW SUPER governance cockpit with gate status, evidence, risks, and tokenized approval actions.",
-          "openai/widgetPrefersBorder": true,
-          "openai/widgetCSP": { connect_domains: [], resource_domains: [] }
+  server.registerResource(
+    "dw_super_cockpit_widget",
+    TEMPLATE_URI,
+    {},
+    async () => ({
+      contents: [
+        {
+          uri: TEMPLATE_URI,
+          mimeType: "text/html+skybridge",
+          text: widgetHtml,
+          _meta: {
+            "openai/widgetDescription": "DW SUPER governance cockpit with gate status, evidence, risks, and tokenized approval actions.",
+            "openai/widgetPrefersBorder": true,
+            "openai/widgetCSP": { connect_domains: [], resource_domains: [] }
+          }
         }
-      }
-    ]
-  })
-);
+      ]
+    })
+  );
 
-server.registerTool(
-  "get_dw_super_state",
-  {
-    title: "Get DW SUPER state",
-    description: "Returns the current DW SUPER governance state and renders the cockpit widget.",
-    outputSchema: z.object({
-      project: z.string(),
-      task_id: z.string(),
-      run_id: z.string(),
-      current_gate: z.string(),
-      status: z.string(),
-      risk: z.string(),
-      health: z.number(),
-      scope_hash: z.string(),
-      approval: z.object({}),
-      repositories: z.array(z.object({})),
-      risks: z.array(z.object({})),
-      timeline: z.array(z.object({}))
-    }),
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      openWorldHint: false
-    },
-    _meta: {
-      ui: { resourceUri: TEMPLATE_URI },
-      "openai/outputTemplate": TEMPLATE_URI,
-      "openai/toolInvocation/invoking": "Loading DW SUPER…",
-      "openai/toolInvocation/invoked": "DW SUPER loaded"
-    }
-  },
-  async () => ({
-    structuredContent: sampleState,
-    content: [
-      {
-        type: "text",
-        text: "DW SUPER governance cockpit loaded. Use the widget buttons to send model-visible actions into this conversation."
+  server.registerTool(
+    "get_dw_super_state",
+    {
+      title: "Get DW SUPER state",
+      description: "Returns the current DW SUPER governance state and renders the cockpit widget.",
+      outputSchema: z.object({
+        project: z.string(),
+        task_id: z.string(),
+        run_id: z.string(),
+        current_gate: z.string(),
+        status: z.string(),
+        risk: z.string(),
+        health: z.number(),
+        scope_hash: z.string(),
+        approval: z.object({}).passthrough(),
+        repositories: z.array(z.object({}).passthrough()),
+        risks: z.array(z.object({}).passthrough()),
+        timeline: z.array(z.object({}).passthrough())
+      }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false
+      },
+      _meta: {
+        ui: { resourceUri: TEMPLATE_URI },
+        "openai/outputTemplate": TEMPLATE_URI,
+        "openai/toolInvocation/invoking": "Loading DW SUPER…",
+        "openai/toolInvocation/invoked": "DW SUPER loaded"
       }
-    ]
-  })
-);
-
-server.registerTool(
-  "record_dw_super_action",
-  {
-    title: "Record DW SUPER action intent",
-    description: "Records a user action intent from the DW SUPER cockpit. This MVP records intent only.",
-    inputSchema: z.object({
-      action: z.string(),
-      approval_token: z.string().optional()
-    }),
-    outputSchema: z.object({
-      accepted: z.boolean(),
-      action: z.string(),
-      task_id: z.string(),
-      gate: z.string(),
-      message: z.string()
-    }),
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false
-    }
-  },
-  async (input: any) => ({
-    structuredContent: {
-      accepted: true,
-      action: input.action,
-      task_id: input.task_id,
-      gate: input.gate,
-      message:
-        input.action === "approve_gate"
-          ? `Approval intent received with token ${input.approval_token}.`
-          : `DW SUPER action intent received: ${input.action}.`
     },
-    content: [
-      {
-        type: "text",
-        text:
+    async () => ({
+      structuredContent: sampleState,
+      content: [
+        {
+          type: "text",
+          text: "DW SUPER governance cockpit loaded. Use the widget buttons to send model-visible actions into this conversation."
+        }
+      ]
+    })
+  );
+
+  server.registerTool(
+    "record_dw_super_action",
+    {
+      title: "Record DW SUPER action intent",
+      description: "Records a user action intent from the DW SUPER cockpit. This MVP records intent only.",
+      inputSchema: z.object({
+        action: z.enum([
+          "continue_gate",
+          "approve_gate",
+          "show_evidence",
+          "explain_risk",
+          "prepare_slack_update",
+          "reject_gate"
+        ]),
+        task_id: z.string(),
+        gate: z.string(),
+        run_id: z.string().optional(),
+        risk: z.string().optional(),
+        scope_hash: z.string().optional(),
+        approval_token: z.string().optional()
+      }),
+      outputSchema: z.object({
+        accepted: z.boolean(),
+        action: z.string(),
+        task_id: z.string(),
+        gate: z.string(),
+        message: z.string()
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false
+      }
+    },
+    async (input) => ({
+      structuredContent: {
+        accepted: true,
+        action: input.action,
+        task_id: input.task_id,
+        gate: input.gate,
+        message:
           input.action === "approve_gate"
-            ? `🟢 Approval intent received for ${input.gate}. Token: ${input.approval_token}.`
-            : `🔵 DW SUPER action received: ${input.action}.`
-      }
-    ]
-  })
-);
+            ? `Approval intent received with token ${input.approval_token ?? "missing"}.`
+            : `DW SUPER action intent received: ${input.action}.`
+      },
+      content: [
+        {
+          type: "text",
+          text:
+            input.action === "approve_gate"
+              ? `🟢 Approval intent received for ${input.gate}. Token: ${input.approval_token ?? "missing"}.`
+              : `🔵 DW SUPER action received: ${input.action}.`
+        }
+      ]
+    })
+  );
 
-let transport: StreamableHTTPServerTransport | null = null;
+  return server;
+}
 
-export const config = { runtime: "nodejs20.x" };
-
-export default async function handler(req: any, res: any) {
-  const rawBody = req.body;
-  const body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
-
-  if (!transport) {
-    transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID()
-    });
-    await server.connect(transport);
+export default async function handler(req: any, res: any): Promise<void> {
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
   }
 
-  await transport.handleRequest(req, res, body);
+  if (req.method === "GET") {
+    res.status(200).json({
+      service: "DW SUPER MCP",
+      status: "ok",
+      endpoint: "/mcp",
+      transport: "streamable-http-stateless"
+    });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST, OPTIONS");
+    res.status(405).json({ error: "method_not_allowed" });
+    return;
+  }
+
+  try {
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const server = createServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined
+    });
+
+    await server.connect(transport);
+    await transport.handleRequest(req, res, body);
+  } catch (error) {
+    console.error("MCP request failed", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "mcp_request_failed" });
+    }
+  }
 }
