@@ -66,6 +66,171 @@ async function callGitHub(sessionId: string, path: string): Promise<{ ok: boolea
   return { ok: true, status: response.status, data };
 }
 
+const dwSuperStateSchema = z
+  .object({
+    project: z.string(),
+    task_id: z.string(),
+    run_id: z.string(),
+    source_instruction: z.string(),
+    execution_mode: z.string(),
+    repository: z.string(),
+    target_system: z.string(),
+    current_gate: z.string(),
+    status: z.string(),
+    risk: z.string(),
+    health: z.number(),
+    scope_hash: z.string(),
+    approval: z
+      .object({
+        gate: z.string(),
+        token: z.string(),
+        label: z.string(),
+        expires_at_utc: z.string()
+      })
+      .passthrough(),
+    repositories: z.array(
+      z
+        .object({
+          name: z.string(),
+          branch: z.string(),
+          sha: z.string(),
+          status: z.string()
+        })
+        .passthrough()
+    ),
+    risks: z.array(
+      z
+        .object({
+          level: z.string(),
+          title: z.string(),
+          detail: z.string()
+        })
+        .passthrough()
+    ),
+    timeline: z.array(
+      z
+        .object({
+          time: z.string(),
+          status: z.string(),
+          event: z.string()
+        })
+        .passthrough()
+    )
+  })
+  .passthrough();
+
+const ggActionResultSchema = dwSuperStateSchema.extend({
+  gg_renderer: z.string(),
+  gg_summary: z.string(),
+  gg_message: z.string()
+});
+
+type DwSuperActionInput = {
+  action: "continue_gate" | "approve_gate" | "show_evidence" | "explain_risk" | "prepare_slack_update" | "reject_gate";
+  task_id: string;
+  run_id?: string;
+  gate: string;
+  risk?: string;
+  scope_hash?: string;
+  approval_token?: string;
+};
+
+function buildNextStateFromAction(input: DwSuperActionInput, ggMessage: string) {
+  const now = new Date().toISOString();
+  const timelineEvent =
+    input.action === "approve_gate"
+      ? "GG rendered approval action and returned control to ChatGPT"
+      : `GG rendered ${input.action} and returned control to ChatGPT`;
+
+  return {
+    ...sampleState,
+    task_id: input.task_id,
+    run_id: input.run_id ?? sampleState.run_id,
+    current_gate: input.gate,
+    risk: input.risk ?? sampleState.risk,
+    scope_hash: input.scope_hash ?? sampleState.scope_hash,
+    status:
+      input.action === "approve_gate"
+        ? "APPROVAL_RECORDED"
+        : input.action === "show_evidence"
+          ? "EVIDENCE_REQUESTED"
+          : input.action === "explain_risk"
+            ? "RISK_EXPLAINED"
+            : input.action === "prepare_slack_update"
+              ? "SLACK_UPDATE_PREPARED"
+              : input.action === "reject_gate"
+                ? "GATE_REJECTED"
+                : "ACTION_RECORDED",
+    approval:
+      input.action === "approve_gate"
+        ? {
+            ...sampleState.approval,
+            token: input.approval_token ?? sampleState.approval.token
+          }
+        : sampleState.approval,
+    timeline: [
+      ...sampleState.timeline,
+      {
+        time: now,
+        status: "done",
+        event: timelineEvent
+      }
+    ],
+    gg_message: ggMessage
+  };
+}
+
+async function callGGRenderer(input: DwSuperActionInput) {
+  const remoteUrl = process.env.GG_API_URL?.trim();
+  if (remoteUrl) {
+    try {
+      const response = await fetch(remoteUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json"
+        },
+        body: JSON.stringify(input)
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as Record<string, unknown>;
+        if (typeof data.gg_message === "string" && typeof data.gg_summary === "string") {
+          const nextState = data.next_state && typeof data.next_state === "object" ? data.next_state : buildNextStateFromAction(input, data.gg_message);
+          return {
+            gg_renderer: typeof data.gg_renderer === "string" ? data.gg_renderer : remoteUrl,
+            gg_summary: data.gg_summary,
+            gg_message: data.gg_message,
+            next_state: nextState
+          };
+        }
+      }
+    } catch (error) {
+      console.warn("GG remote renderer unavailable, using local GG renderer", error);
+    }
+  }
+
+  const ggMessage =
+    input.action === "approve_gate"
+      ? `GG rendered approval for ${input.task_id} at ${input.gate}. Action returned to ChatGPT with token ${input.approval_token}.`
+      : input.action === "show_evidence"
+        ? `GG rendered evidence request for ${input.task_id} at ${input.gate} and returned the action to ChatGPT.`
+        : input.action === "explain_risk"
+          ? `GG rendered risk explanation for ${input.task_id} at ${input.gate} and returned the action to ChatGPT.`
+          : input.action === "prepare_slack_update"
+            ? `GG rendered Slack update draft request for ${input.task_id} at ${input.gate} and returned the action to ChatGPT.`
+            : input.action === "reject_gate"
+              ? `GG rendered gate rejection for ${input.task_id} at ${input.gate} and returned the action to ChatGPT.`
+              : `GG rendered continue request for ${input.task_id} at ${input.gate} and returned the action to ChatGPT.`;
+
+  return {
+    gg_renderer: "local-gg-renderer",
+    gg_summary: `GG rendered ${input.action} for ${input.task_id} / ${input.gate}`,
+    gg_message: ggMessage,
+    next_state: buildNextStateFromAction(input, ggMessage)
+  };
+}
+
 const widgetHtml = `
 <div class="dw-root" data-app="dw-super-cockpit">
   <style>
@@ -371,7 +536,7 @@ const widgetHtml = `
       <div class="dw-card">
         <h3>🚦 Gate journey</h3>
         <div class="dw-gates" id="gates">
-          <div class="dw-gate done">✅<strong>G0</strong><span>Context</span></div>
+          <div class="dw-gate done">�?strong>G0</strong><span>Context</span></div>
           <div class="dw-gate current">🟡<strong>G1</strong><span>Alignment</span></div>
           <div class="dw-gate locked">🔒<strong>G2</strong><span>Execution</span></div>
           <div class="dw-gate locked">🔒<strong>G3</strong><span>PR</span></div>
@@ -384,17 +549,17 @@ const widgetHtml = `
         <h3>👤 Human actions</h3>
         <div class="dw-action-grid">
           <button class="dw-btn primary" type="button" data-action="continue_gate">
-            <span>▶ Continue current gate</span><span>G1</span>
+            <span>�?Continue current gate</span><span>G1</span>
           </button>
           <button class="dw-btn approve" type="button" data-action="approve_gate">
             <span>Approve G1<br><span class="dw-token" id="approvalToken">APPROVE_G1_RHUA04_20260724</span></span>
-            <span>✓</span>
+            <span>�?/span>
           </button>
           <button class="dw-btn" type="button" data-action="show_evidence">
-            <span>🔍 Show evidence</span><span>view</span>
+            <span>🔝 Show evidence</span><span>view</span>
           </button>
           <button class="dw-btn" type="button" data-action="explain_risk">
-            <span>⚠ Explain risk</span><span>R2</span>
+            <span>�?Explain risk</span><span>R2</span>
           </button>
           <button class="dw-btn" type="button" data-action="prepare_slack_update">
             <span>💬 Prepare Slack thread update</span><span>draft</span>
@@ -410,7 +575,7 @@ const widgetHtml = `
       </div>
 
       <div class="dw-card">
-        <h3>⚠ Risks</h3>
+        <h3>�?Risks</h3>
         <ul class="dw-list" id="risks"></ul>
       </div>
     </section>
@@ -671,7 +836,7 @@ server.registerTool(
   {
     title: "Record DW SUPER action intent",
     description:
-      "Records a user action intent from the DW SUPER cockpit. This MVP records intent only; it does not mutate GitHub, GWC, Slack, or audit state.",
+      "Records a user action intent from the DW SUPER cockpit, routes it through GG rendering, and returns the GG-rendered state to ChatGPT.",
     inputSchema: z.object({
       action: z.enum([
         "continue_gate",
@@ -688,40 +853,32 @@ server.registerTool(
       scope_hash: z.string().optional(),
       approval_token: z.string().optional()
     }),
-    outputSchema: z.object({
-      accepted: z.boolean(),
-      action: z.string(),
-      task_id: z.string(),
-      gate: z.string(),
-      message: z.string()
-    }),
+    outputSchema: ggActionResultSchema,
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: false
     }
   },
-  async (input) => ({
-    structuredContent: {
-      accepted: true,
-      action: input.action,
-      task_id: input.task_id,
-      gate: input.gate,
-      message:
-        input.action === "approve_gate"
-          ? `Approval intent received with token ${input.approval_token}.`
-          : `DW SUPER action intent received: ${input.action}.`
-    },
-    content: [
-      {
-        type: "text",
-        text:
-          input.action === "approve_gate"
-            ? `🟢 Approval intent received for ${input.gate}. Token: ${input.approval_token}.`
-            : `🔵 DW SUPER action received: ${input.action}.`
-      }
-    ]
-  })
+  async (input: DwSuperActionInput) => {
+    const gg = await callGGRenderer(input);
+    const nextState = gg.next_state;
+
+    return {
+      structuredContent: {
+        ...nextState,
+        gg_renderer: gg.gg_renderer,
+        gg_summary: gg.gg_summary,
+        gg_message: gg.gg_message
+      },
+      content: [
+        {
+          type: "text",
+          text: gg.gg_message
+        }
+      ]
+    };
+  }
 );
 
 server.registerTool(
@@ -836,3 +993,4 @@ server.registerTool(
 );
 
 export default server;
+

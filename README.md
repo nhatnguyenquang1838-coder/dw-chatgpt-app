@@ -23,6 +23,8 @@ The official Apps SDK still requires an MCP Apps server shell to expose tools an
 
 The widget resource is returned as MCP Apps HTML using `text/html;profile=mcp-app`.
 
+Button clicks now round-trip through a GG rendering layer before the action result is returned to ChatGPT. If you have a separate GG service, point `GG_API_URL` at it; otherwise the app uses the built-in GG renderer.
+
 ## What is included
 
 ```text
