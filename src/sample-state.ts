@@ -76,5 +76,8 @@ export const sampleState = {
       "status": "pending",
       "event": "G1 approval requested"
     }
-  ]
+  ],
+  "github_configured": false,
+  "github_repositories": [],
+  "github_errors": []
 } as const;

@@ -5,9 +5,66 @@ import { sampleState } from "./sample-state.js";
 const TEMPLATE_URI = "ui://dw-super/cockpit.html";
 
 const server = new McpServer(
-  { name: "DW SUPER Governance Cockpit", version: "1.0.0" },
+  { name: "DW SUPER Governance Cockpit", version: "1.1.0" },
   { capabilities: { tools: {}, resources: {} } }
 );
+
+type GitHubSessionState = {
+  token: string;
+  configuredAt: string;
+};
+
+type GitHubSessionContext = {
+  sessionId: string;
+};
+
+const githubSessions = new Map<string, GitHubSessionState>();
+const activeSession = new Map<string, GitHubSessionContext>();
+
+function getSessionId(): string {
+  return activeSession.get("current")?.sessionId ?? "default";
+}
+
+function setSessionId(sessionId: string): void {
+  activeSession.set("current", { sessionId });
+}
+
+function getGitHubToken(sessionId: string): string | null {
+  return githubSessions.get(sessionId)?.token ?? null;
+}
+
+function setGitHubToken(sessionId: string, token: string): void {
+  githubSessions.set(sessionId, { token, configuredAt: new Date().toISOString() });
+}
+
+async function callGitHub(sessionId: string, path: string): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> {
+  const token = getGitHubToken(sessionId);
+  if (!token) return { ok: false, status: 401, error: "GITHUB_TOKEN_MISSING" };
+
+  const response = await fetch(`https://api.github.com${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "dw-super-chatgpt-app"
+    }
+  });
+
+  const text = await response.text();
+  let data: unknown = text;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // keep text
+  }
+
+  if (!response.ok) {
+    const message = typeof data === "object" && data && "message" in data ? String((data as Record<string, unknown>).message) : response.statusText;
+    return { ok: false, status: response.status, data, error: message };
+  }
+
+  return { ok: true, status: response.status, data };
+}
 
 const dwSuperStateSchema = z
   .object({
@@ -499,7 +556,7 @@ const widgetHtml = `
             <span>‚ú?/span>
           </button>
           <button class="dw-btn" type="button" data-action="show_evidence">
-            <span>üîç Show evidence</span><span>view</span>
+            <span>üîù Show evidence</span><span>view</span>
           </button>
           <button class="dw-btn" type="button" data-action="explain_risk">
             <span>‚ö?Explain risk</span><span>R2</span>
@@ -600,10 +657,11 @@ const widgetHtml = `
       ];
 
       if (action === "approve_gate") {
-        lines.push(\`approval_token: \${state.approval.token}\`);
-        lines.push(\`approval_label: \${state.approval.label}\`);
-        lines.push(\`expires_at_utc: \${state.approval.expires_at_utc}\`);
+        lines.push("approval_token: " + state.approval.token);
+        lines.push("approval_label: " + state.approval.label);
+        lines.push("expires_at_utc: " + state.approval.expires_at_utc);
         lines.push("human_intent: approve");
+        lines.push("approval_envelope: " + JSON.stringify({ task_id: state.task_id, approved: true, token: state.approval.token, timestamp: new Date().toISOString() }));
       }
 
       if (action === "prepare_slack_update") {
@@ -718,7 +776,12 @@ server.registerTool(
     title: "Get DW SUPER state",
     description:
       "Returns the current DW SUPER governance state and renders the cockpit widget.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      task_id: z.string(),
+      title: z.string().optional(),
+      content: z.string().optional(),
+      timeline: z.array(z.any()).optional()
+    }),
     outputSchema: z.object({
       project: z.string(),
       task_id: z.string(),
@@ -732,45 +795,13 @@ server.registerTool(
       risk: z.string(),
       health: z.number(),
       scope_hash: z.string(),
-      approval: z
-        .object({
-          gate: z.string(),
-          token: z.string(),
-          label: z.string(),
-          expires_at_utc: z.string()
-        })
-        .passthrough(),
-      repositories: z.array(
-        z
-          .object({
-            name: z.string(),
-            branch: z.string(),
-            sha: z.string(),
-            status: z.string()
-          })
-          .passthrough()
-      ),
-      risks: z.array(
-        z
-          .object({
-            level: z.string(),
-            title: z.string(),
-            detail: z.string()
-          })
-          .passthrough()
-      ),
-      timeline: z.array(
-        z
-          .object({
-            time: z.string(),
-            status: z.string(),
-            event: z.string()
-          })
-          .passthrough()
-      )
+      approval: z.any(),
+      repositories: z.array(z.any()),
+      risks: z.array(z.any()),
+      timeline: z.array(z.any())
     }).passthrough(),
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: false
     },
@@ -781,16 +812,23 @@ server.registerTool(
       "openai/toolInvocation/invoked": "DW SUPER loaded"
     }
   },
-  async () => ({
-    structuredContent: sampleState,
-    content: [
-      {
-        type: "text",
-        text:
-          "DW SUPER governance cockpit loaded. Use the widget buttons to send model-visible actions into this conversation."
-      }
-    ]
-  })
+  async (input) => {
+    // Dynamic state merge
+    const nextState = {
+      ...sampleState,
+      task_id: input.task_id,
+      timeline: input.timeline ?? sampleState.timeline
+    };
+    return {
+      structuredContent: nextState,
+      content: [
+        {
+          type: "text",
+          text: `DW SUPER governance state updated for task ${input.task_id}. Cockpit rendered.`
+        }
+      ]
+    };
+  }
 );
 
 server.registerTool(
@@ -840,6 +878,117 @@ server.registerTool(
         }
       ]
     };
+  }
+);
+
+server.registerTool(
+  "mcp__dw_super__configure_github",
+  {
+    title: "Configure GitHub token",
+    description: "Stores a GitHub token for the current session.",
+    inputSchema: z.object({ token: z.string().min(1) }),
+    outputSchema: z.object({ configured: z.boolean(), session_id: z.string() }),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  },
+  async ({ token }) => {
+    const sessionId = getSessionId();
+    setGitHubToken(sessionId, token);
+    return {
+      structuredContent: { configured: true, session_id: sessionId },
+      content: [{ type: "text", text: "GitHub token configured for this session." }]
+    };
+  }
+);
+
+server.registerTool(
+  "mcp__dw_super__github_list_prs",
+  {
+    title: "List PRs",
+    description: "Lists pull requests for a repository.",
+    inputSchema: z.object({ owner: z.string(), repo: z.string(), state: z.enum(["open", "closed", "all"]).optional(), per_page: z.number().int().min(1).max(100).optional(), page: z.number().int().min(1).optional() }),
+    outputSchema: z.object({ items: z.array(z.object({ number: z.number(), title: z.string(), state: z.string(), user: z.string().optional(), url: z.string().optional() })), error: z.string().optional() }),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  async (input) => {
+    const sessionId = getSessionId();
+    const params = new URLSearchParams();
+    params.set("state", input.state ?? "open");
+    if (input.per_page) params.set("per_page", String(input.per_page));
+    if (input.page) params.set("page", String(input.page));
+    const res = await callGitHub(sessionId, `/repos/${input.owner}/${input.repo}/pulls?${params.toString()}`);
+    if (!res.ok || !Array.isArray(res.data)) {
+      return { structuredContent: { items: [], error: res.error ?? `HTTP_${res.status}` }, content: [{ type: "text", text: `GitHub PR list failed: ${res.error ?? res.status}` }] };
+    }
+    const items = res.data.map((pr: any) => ({ number: pr.number, title: pr.title, state: pr.state, user: pr.user?.login, url: pr.html_url }));
+    return { structuredContent: { items }, content: [{ type: "text", text: `Loaded ${items.length} PRs.` }] };
+  }
+);
+
+server.registerTool(
+  "mcp__dw_super__github_get_pr",
+  {
+    title: "Get PR",
+    description: "Gets a single pull request.",
+    inputSchema: z.object({ owner: z.string(), repo: z.string(), pull_number: z.number().int().positive() }),
+    outputSchema: z.object({ number: z.number(), title: z.string(), state: z.string(), merged: z.boolean().optional(), user: z.string().optional(), body: z.string().optional(), url: z.string().optional(), additions: z.number().optional(), deletions: z.number().optional(), changed_files: z.number().optional(), error: z.string().optional() }),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  async (input) => {
+    const res = await callGitHub(getSessionId(), `/repos/${input.owner}/${input.repo}/pulls/${input.pull_number}`);
+    if (!res.ok || typeof res.data !== "object" || !res.data) {
+      return { structuredContent: { number: input.pull_number, title: "", state: "", error: res.error ?? `HTTP_${res.status}` }, content: [{ type: "text", text: `GitHub PR fetch failed: ${res.error ?? res.status}` }] };
+    }
+    const pr = res.data as Record<string, any>;
+    return { structuredContent: { number: pr.number, title: pr.title, state: pr.state, merged: pr.merged, user: pr.user?.login, body: pr.body, url: pr.html_url, additions: pr.additions, deletions: pr.deletions, changed_files: pr.changed_files }, content: [{ type: "text", text: `Loaded PR #${pr.number}.` }] };
+  }
+);
+
+server.registerTool(
+  "mcp__dw_super__github_list_workflow_runs",
+  {
+    title: "List workflow runs",
+    description: "Lists GitHub Actions workflow runs.",
+    inputSchema: z.object({ owner: z.string(), repo: z.string(), workflow_id: z.union([z.string(), z.number()]).optional(), branch: z.string().optional(), per_page: z.number().int().min(1).max(100).optional(), page: z.number().int().min(1).optional() }),
+    outputSchema: z.object({ items: z.array(z.object({ id: z.number(), workflow_id: z.number().optional(), workflow_name: z.string().optional(), status: z.string().optional(), conclusion: z.string().optional(), head_branch: z.string().optional(), head_sha: z.string().optional(), url: z.string().optional() })), error: z.string().optional() }),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  async (input) => {
+    const params = new URLSearchParams();
+    if (input.workflow_id !== undefined) params.set("workflow_id", String(input.workflow_id));
+    if (input.branch) params.set("branch", input.branch);
+    if (input.per_page) params.set("per_page", String(input.per_page));
+    if (input.page) params.set("page", String(input.page));
+    const res = await callGitHub(getSessionId(), `/repos/${input.owner}/${input.repo}/actions/runs?${params.toString()}`);
+    if (!res.ok || typeof res.data !== "object" || !res.data || !("workflow_runs" in res.data)) {
+      return { structuredContent: { items: [], error: res.error ?? `HTTP_${res.status}` }, content: [{ type: "text", text: `GitHub workflow list failed: ${res.error ?? res.status}` }] };
+    }
+    const payload = res.data as Record<string, any>;
+    const items = (payload.workflow_runs ?? []).map((run: any) => ({ id: run.id, workflow_id: run.workflow_id, workflow_name: run.name, status: run.status, conclusion: run.conclusion, head_branch: run.head_branch, head_sha: run.head_sha, url: run.html_url }));
+    return { structuredContent: { items }, content: [{ type: "text", text: `Loaded ${items.length} workflow runs.` }] };
+  }
+);
+
+server.registerTool(
+  "mcp__dw_super__github_get_workflow_run",
+  {
+    title: "Get workflow run",
+    description: "Gets a GitHub Actions workflow run and its jobs.",
+    inputSchema: z.object({ owner: z.string(), repo: z.string(), run_id: z.number().int().positive() }),
+    outputSchema: z.object({ id: z.number(), workflow_id: z.number().optional(), workflow_name: z.string().optional(), status: z.string().optional(), conclusion: z.string().optional(), head_branch: z.string().optional(), head_sha: z.string().optional(), event: z.string().optional(), url: z.string().optional(), jobs: z.array(z.object({ id: z.number(), name: z.string().optional(), status: z.string().optional(), conclusion: z.string().optional(), started_at: z.string().optional(), completed_at: z.string().optional() })).optional(), error: z.string().optional() }),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  async (input) => {
+    const sessionId = getSessionId();
+    const runRes = await callGitHub(sessionId, `/repos/${input.owner}/${input.repo}/actions/runs/${input.run_id}`);
+    if (!runRes.ok || typeof runRes.data !== "object" || !runRes.data) {
+      return { structuredContent: { id: input.run_id, error: runRes.error ?? `HTTP_${runRes.status}` }, content: [{ type: "text", text: `GitHub workflow fetch failed: ${runRes.error ?? runRes.status}` }] };
+    }
+    const run = runRes.data as Record<string, any>;
+    const jobsRes = await callGitHub(sessionId, `/repos/${input.owner}/${input.repo}/actions/runs/${input.run_id}/jobs`);
+    const jobs = jobsRes.ok && typeof jobsRes.data === "object" && jobsRes.data && Array.isArray((jobsRes.data as Record<string, any>).jobs)
+      ? (jobsRes.data as Record<string, any>).jobs.map((job: any) => ({ id: job.id, name: job.name, status: job.status, conclusion: job.conclusion, started_at: job.started_at, completed_at: job.completed_at }))
+      : [];
+    return { structuredContent: { id: run.id, workflow_id: run.workflow_id, workflow_name: run.name, status: run.status, conclusion: run.conclusion, head_branch: run.head_branch, head_sha: run.head_sha, event: run.event, url: run.html_url, jobs }, content: [{ type: "text", text: `Loaded workflow run #${run.id}.` }] };
   }
 );
 
