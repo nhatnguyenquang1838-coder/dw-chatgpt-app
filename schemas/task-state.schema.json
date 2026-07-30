@@ -32,6 +32,15 @@
     },
     "timeline": {
       "type": "array"
+    },
+    "github_configured": {
+      "type": "boolean"
+    },
+    "github_repositories": {
+      "type": "array"
+    },
+    "github_errors": {
+      "type": "array"
     }
   },
   "required": [

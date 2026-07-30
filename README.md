@@ -89,6 +89,10 @@ scope_hash: 8c6dc26b45491407
 
 Then the assistant continues from that message.
 
+## GitHub MCP
+
+This app also exposes read-only GitHub MCP tools for PR and workflow status checks. The assistant must first configure a GitHub token for the active session, then call the GitHub tools and render the results back into the cockpit widget.
+
 ## Governance rule
 
 The app only captures and presents intent. It must not claim repository changes, audit writes, Slack posts, PR updates, or gate transitions unless evidence exists.

@@ -15,6 +15,12 @@ function setCorsHeaders(res: any): void {
 export default async function handler(req: any, res: any): Promise<void> {
   setCorsHeaders(res);
 
+  const sessionId =
+    req.headers["mcp-session-id"] || req.headers["x-mcp-session-id"] || req.headers["x-dw-session-id"];
+  if (typeof sessionId === "string" && sessionId.length > 0) {
+    res.setHeader("MCP-Session-Id", sessionId);
+  }
+
   if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
