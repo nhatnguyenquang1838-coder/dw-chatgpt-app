@@ -433,10 +433,20 @@
         lines.push("instruction: load Slack Connector, read Slack Canvas policy, then draft a threaded Slack update.");
       }
 
-      return lines.join("\\n");
+      return lines.join("\n");
     }
 
-    function postToChatGPT(text) {
+    function getOpenAiBridge() {
+      return typeof window !== "undefined" ? window.openai : undefined;
+    }
+
+    async function postToChatGPT(text) {
+      const openai = getOpenAiBridge();
+      if (openai?.sendFollowUpMessage) {
+        await openai.sendFollowUpMessage({ prompt: text, scrollToBottom: true });
+        return true;
+      }
+
       const payload = {
         jsonrpc: "2.0",
         method: "ui/message",
@@ -481,7 +491,7 @@
         const action = button.getAttribute("data-action");
         const message = buildActionMessage(action);
         await updateModelContext(`User selected DW SUPER action: ${action}`);
-        const posted = postToChatGPT(message);
+        const posted = await postToChatGPT(message);
         if (!posted) localFallback(message);
       });
     });

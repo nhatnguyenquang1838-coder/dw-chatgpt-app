@@ -445,10 +445,20 @@ const widgetHtml = `
         lines.push("instruction: load Slack Connector, read Slack Canvas policy, then draft a threaded Slack update.");
       }
 
-      return lines.join("\\\\n");
+      return lines.join("\\n");
     }
 
-    function postToChatGPT(text) {
+    function getOpenAiBridge() {
+      return typeof window !== "undefined" ? window.openai : undefined;
+    }
+
+    async function postToChatGPT(text) {
+      const openai = getOpenAiBridge();
+      if (openai?.sendFollowUpMessage) {
+        await openai.sendFollowUpMessage({ prompt: text, scrollToBottom: true });
+        return true;
+      }
+
       const payload = {
         jsonrpc: "2.0",
         method: "ui/message",
@@ -493,7 +503,7 @@ const widgetHtml = `
         const action = button.getAttribute("data-action");
         const message = buildActionMessage(action);
         await updateModelContext(\`User selected DW SUPER action: \${action}\`);
-        const posted = postToChatGPT(message);
+        const posted = await postToChatGPT(message);
         if (!posted) localFallback(message);
       });
     });
@@ -521,7 +531,7 @@ server.registerResource(
     contents: [
       {
         uri: TEMPLATE_URI,
-        mimeType: "text/html+skybridge",
+        mimeType: "text/html;profile=mcp-app",
         text: widgetHtml,
         _meta: {
           "openai/widgetDescription":
@@ -544,24 +554,56 @@ server.registerTool(
     description:
       "Returns the current DW SUPER governance state and renders the cockpit widget.",
     inputSchema: z.object({}),
-    outputSchema: {
-      type: "object",
-      properties: {
-        project: { type: "string" },
-        task_id: { type: "string" },
-        run_id: { type: "string" },
-        current_gate: { type: "string" },
-        status: { type: "string" },
-        risk: { type: "string" },
-        health: { type: "number" },
-        scope_hash: { type: "string" },
-        approval: { type: "object" },
-        repositories: { type: "array" },
-        risks: { type: "array" },
-        timeline: { type: "array" }
-      },
-      required: ["project", "task_id", "run_id", "current_gate", "status"]
-    },
+    outputSchema: z.object({
+      project: z.string(),
+      task_id: z.string(),
+      run_id: z.string(),
+      source_instruction: z.string(),
+      execution_mode: z.string(),
+      repository: z.string(),
+      target_system: z.string(),
+      current_gate: z.string(),
+      status: z.string(),
+      risk: z.string(),
+      health: z.number(),
+      scope_hash: z.string(),
+      approval: z
+        .object({
+          gate: z.string(),
+          token: z.string(),
+          label: z.string(),
+          expires_at_utc: z.string()
+        })
+        .passthrough(),
+      repositories: z.array(
+        z
+          .object({
+            name: z.string(),
+            branch: z.string(),
+            sha: z.string(),
+            status: z.string()
+          })
+          .passthrough()
+      ),
+      risks: z.array(
+        z
+          .object({
+            level: z.string(),
+            title: z.string(),
+            detail: z.string()
+          })
+          .passthrough()
+      ),
+      timeline: z.array(
+        z
+          .object({
+            time: z.string(),
+            status: z.string(),
+            event: z.string()
+          })
+          .passthrough()
+      )
+    }).passthrough(),
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -570,7 +612,7 @@ server.registerTool(
     _meta: {
       ui: { resourceUri: TEMPLATE_URI },
       "openai/outputTemplate": TEMPLATE_URI,
-      "openai/toolInvocation/invoking": "Loading DW SUPER…",
+      "openai/toolInvocation/invoking": "Loading DW SUPER...",
       "openai/toolInvocation/invoked": "DW SUPER loaded"
     }
   },
@@ -608,17 +650,13 @@ server.registerTool(
       scope_hash: z.string().optional(),
       approval_token: z.string().optional()
     }),
-    outputSchema: {
-      type: "object",
-      properties: {
-        accepted: { type: "boolean" },
-        action: { type: "string" },
-        task_id: { type: "string" },
-        gate: { type: "string" },
-        message: { type: "string" }
-      },
-      required: ["accepted", "action", "task_id", "gate", "message"]
-    },
+    outputSchema: z.object({
+      accepted: z.boolean(),
+      action: z.string(),
+      task_id: z.string(),
+      gate: z.string(),
+      message: z.string()
+    }),
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

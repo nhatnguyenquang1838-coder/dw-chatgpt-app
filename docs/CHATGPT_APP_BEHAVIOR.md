@@ -2,7 +2,7 @@
 
 ## What the button does
 
-A button in the DW SUPER widget sends a message into the current ChatGPT conversation using the Apps bridge method:
+A button in the DW SUPER widget sends a message into the current ChatGPT conversation using the Apps bridge method, with `window.openai.sendFollowUpMessage(...)` as the ChatGPT compatibility alias:
 
 ```json
 {

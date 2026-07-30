@@ -17,9 +17,11 @@ It is designed for the exact interaction model requested:
 
 A normal standalone HTML file cannot talk back to ChatGPT.
 
-A ChatGPT App widget can request a follow-up user message through the ChatGPT Apps bridge using `ui/message`.
+A ChatGPT App widget can request a follow-up user message through the ChatGPT Apps bridge using `ui/message`, or use the ChatGPT compatibility helper `window.openai.sendFollowUpMessage(...)`.
 
 The official Apps SDK still requires an MCP Apps server shell to expose tools and UI templates to ChatGPT, but this package does **not** require a DW SUPER/GWC MCP backend. The included server is only the ChatGPT App host.
+
+The widget resource is returned as MCP Apps HTML using `text/html;profile=mcp-app`.
 
 ## What is included
 

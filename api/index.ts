@@ -1,37 +1,5 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import server from "../src/server.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-
-function createServer(): McpServer {
-  const server = new McpServer({
-    name: "DW SUPER Hello MCP",
-    version: "1.0.0"
-  });
-
-  server.registerTool(
-    "hello_dw_super",
-    {
-      title: "Hello DW SUPER",
-      description: "Return a simple hello message to verify that ChatGPT can connect to the DW SUPER MCP server.",
-      inputSchema: {},
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
-    },
-    async () => ({
-      content: [
-        {
-          type: "text" as const,
-          text: "Hello from DW SUPER MCP. The basic MCP connection is working."
-        }
-      ]
-    })
-  );
-
-  return server;
-}
 
 function setCorsHeaders(res: any): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -40,10 +8,7 @@ function setCorsHeaders(res: any): void {
     "Access-Control-Allow-Headers",
     "Content-Type, Accept, Authorization, MCP-Protocol-Version, MCP-Session-Id"
   );
-  res.setHeader(
-    "Access-Control-Expose-Headers",
-    "MCP-Protocol-Version, MCP-Session-Id"
-  );
+  res.setHeader("Access-Control-Expose-Headers", "MCP-Protocol-Version, MCP-Session-Id");
   res.setHeader("Cache-Control", "no-store");
 }
 
@@ -70,7 +35,6 @@ export default async function handler(req: any, res: any): Promise<void> {
     : body?.method;
   console.log(`[mcp] ${req.method} /mcp${rpcMethod ? ` method=${rpcMethod}` : ""}`);
 
-  const server = createServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true
@@ -78,7 +42,6 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   res.on("close", () => {
     void transport.close();
-    void server.close();
   });
 
   try {
