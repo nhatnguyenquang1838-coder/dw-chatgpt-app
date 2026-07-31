@@ -15,6 +15,22 @@
     {
       "source": "/mcp",
       "destination": "/api"
+    },
+    {
+      "source": "/api/auth/gg/authorize",
+      "destination": "/api/auth/gg/authorize"
+    },
+    {
+      "source": "/api/auth/gg/callback",
+      "destination": "/api/auth/gg/callback"
+    },
+    {
+      "source": "/api/auth/gg/session",
+      "destination": "/api/auth/gg/session"
+    },
+    {
+      "source": "/api/auth/gg/logout",
+      "destination": "/api/auth/gg/logout"
     }
   ],
   "headers": [

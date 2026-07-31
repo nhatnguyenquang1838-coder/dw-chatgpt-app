@@ -1,51 +1,121 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v3";
 import { sampleState } from "./sample-state.js";
+import crypto from "node:crypto";
 
 const TEMPLATE_URI = "ui://dw-super/cockpit.html";
 
 const server = new McpServer(
-  { name: "DW SUPER Governance Cockpit", version: "1.1.0" },
+  { name: "DW SUPER Governance Cockpit", version: "1.2.0" },
   { capabilities: { tools: {}, resources: {} } }
 );
 
-type GitHubSessionState = {
-  token: string;
-  configuredAt: string;
+// OAuth Configuration & State Management
+type OAuthSessionState = {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: number; // timestamp in ms
+  providerUserId: string;
+  workspaceId: string;
 };
 
-type GitHubSessionContext = {
-  sessionId: string;
+// Simplified storage for now; will be replaced by secure encrypted store
+const oauthSessions = new Map<string, OAuthSessionState>();
+const activeSession = new Map<string, string>(); // session cookie ID -> sessionId
+
+// GET /api/auth/gg/authorize
+export const authorizeGG = async () => {
+  const state = crypto.randomBytes(16).toString("hex");
+  const authUrl = `${process.env.GG_OAUTH_AUTHORIZATION_URL}?client_id=${process.env.GG_OAUTH_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GG_OAUTH_REDIRECT_URI!)}&response_type=code&scope=${process.env.GG_OAUTH_SCOPES}&state=${state}`;
+  return { url: authUrl, state };
 };
 
-const githubSessions = new Map<string, GitHubSessionState>();
-const activeSession = new Map<string, GitHubSessionContext>();
+// GET /api/auth/gg/callback
+export const callbackGG = async (code: string, state: string, storedState: string) => {
+  if (state !== storedState) throw new Error("Invalid state");
+  
+  const tokenResponse = await fetch(process.env.GG_OAUTH_TOKEN_URL!, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.GG_OAUTH_CLIENT_ID,
+      client_secret: process.env.GG_OAUTH_CLIENT_SECRET,
+      code,
+      redirect_uri: process.env.GG_OAUTH_REDIRECT_URI,
+      grant_type: "authorization_code"
+    })
+  });
+
+  if (!tokenResponse.ok) throw new Error("Token exchange failed");
+  const tokens = await tokenResponse.json();
+  
+  const sessionId = crypto.randomUUID();
+  oauthSessions.set(sessionId, {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresAt: Date.now() + tokens.expires_in * 1000,
+    providerUserId: tokens.user_id,
+    workspaceId: "default"
+  });
+
+  return { sessionId };
+};
+
+// POST /api/auth/gg/logout
+export const logoutGG = async (sessionId: string) => {
+  const session = oauthSessions.get(sessionId);
+  if (session && process.env.GG_OAUTH_REVOCATION_URL) {
+     await fetch(process.env.GG_OAUTH_REVOCATION_URL, {
+        method: "POST",
+        body: JSON.stringify({ token: session.accessToken })
+     });
+  }
+  oauthSessions.delete(sessionId);
+  activeSession.delete(sessionId);
+  return { success: true };
+};
 
 function getSessionId(): string {
-  return activeSession.get("current")?.sessionId ?? "default";
+  return activeSession.get("current") ?? "default";
 }
 
 function setSessionId(sessionId: string): void {
-  activeSession.set("current", { sessionId });
+  activeSession.set("current", sessionId);
 }
 
-function getGitHubToken(sessionId: string): string | null {
-  return githubSessions.get(sessionId)?.token ?? null;
-}
+// GG Client with OAuth
+async function callGG(sessionId: string, path: string): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> {
+  const session = oauthSessions.get(sessionId);
+  if (!session) return { ok: false, status: 401, error: "GG_AUTH_MISSING" };
 
-function setGitHubToken(sessionId: string, token: string): void {
-  githubSessions.set(sessionId, { token, configuredAt: new Date().toISOString() });
-}
+  // Check token expiry (refresh 60s early)
+  if (session.expiresAt && Date.now() > session.expiresAt - 60000 && session.refreshToken) {
+    const refreshResponse = await fetch(process.env.GG_OAUTH_TOKEN_URL!, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: process.env.GG_OAUTH_CLIENT_ID,
+        client_secret: process.env.GG_OAUTH_CLIENT_SECRET,
+        refresh_token: session.refreshToken,
+        grant_type: "refresh_token"
+      })
+    });
+    if (refreshResponse.ok) {
+      const tokens = await refreshResponse.json();
+      session.accessToken = tokens.access_token;
+      session.expiresAt = Date.now() + tokens.expires_in * 1000;
+      if (tokens.refresh_token) session.refreshToken = tokens.refresh_token;
+      oauthSessions.set(sessionId, session);
+    } else {
+      oauthSessions.delete(sessionId);
+      return { ok: false, status: 401, error: "GG_TOKEN_REFRESH_FAILED" };
+    }
+  }
 
-async function callGitHub(sessionId: string, path: string): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> {
-  const token = getGitHubToken(sessionId);
-  if (!token) return { ok: false, status: 401, error: "GITHUB_TOKEN_MISSING" };
-
-  const response = await fetch(`https://api.github.com${path}`, {
+  const response = await fetch(`https://api.gg.example.com${path}`, {
     headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
+      Authorization: `Bearer ${session.accessToken}`,
+      Accept: "application/json",
       "User-Agent": "dw-super-chatgpt-app"
     }
   });
@@ -892,10 +962,16 @@ server.registerTool(
   },
   async ({ token }) => {
     const sessionId = getSessionId();
-    setGitHubToken(sessionId, token);
+    // Assuming GG token configuration for session
+    oauthSessions.set(sessionId, {
+        accessToken: token,
+        expiresAt: Date.now() + 3600 * 1000,
+        providerUserId: "manual",
+        workspaceId: "default"
+    });
     return {
       structuredContent: { configured: true, session_id: sessionId },
-      content: [{ type: "text", text: "GitHub token configured for this session." }]
+      content: [{ type: "text", text: "GG token configured for this session." }]
     };
   }
 );
@@ -915,7 +991,7 @@ server.registerTool(
     params.set("state", input.state ?? "open");
     if (input.per_page) params.set("per_page", String(input.per_page));
     if (input.page) params.set("page", String(input.page));
-    const res = await callGitHub(sessionId, `/repos/${input.owner}/${input.repo}/pulls?${params.toString()}`);
+    const res = await callGG(sessionId, `/repos/${input.owner}/${input.repo}/pulls?${params.toString()}`);
     if (!res.ok || !Array.isArray(res.data)) {
       return { structuredContent: { items: [], error: res.error ?? `HTTP_${res.status}` }, content: [{ type: "text", text: `GitHub PR list failed: ${res.error ?? res.status}` }] };
     }
@@ -934,7 +1010,7 @@ server.registerTool(
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
   async (input) => {
-    const res = await callGitHub(getSessionId(), `/repos/${input.owner}/${input.repo}/pulls/${input.pull_number}`);
+    const res = await callGG(getSessionId(), `/repos/${input.owner}/${input.repo}/pulls/${input.pull_number}`);
     if (!res.ok || typeof res.data !== "object" || !res.data) {
       return { structuredContent: { number: input.pull_number, title: "", state: "", error: res.error ?? `HTTP_${res.status}` }, content: [{ type: "text", text: `GitHub PR fetch failed: ${res.error ?? res.status}` }] };
     }
@@ -958,7 +1034,7 @@ server.registerTool(
     if (input.branch) params.set("branch", input.branch);
     if (input.per_page) params.set("per_page", String(input.per_page));
     if (input.page) params.set("page", String(input.page));
-    const res = await callGitHub(getSessionId(), `/repos/${input.owner}/${input.repo}/actions/runs?${params.toString()}`);
+    const res = await callGG(getSessionId(), `/repos/${input.owner}/${input.repo}/actions/runs?${params.toString()}`);
     if (!res.ok || typeof res.data !== "object" || !res.data || !("workflow_runs" in res.data)) {
       return { structuredContent: { items: [], error: res.error ?? `HTTP_${res.status}` }, content: [{ type: "text", text: `GitHub workflow list failed: ${res.error ?? res.status}` }] };
     }
@@ -979,12 +1055,12 @@ server.registerTool(
   },
   async (input) => {
     const sessionId = getSessionId();
-    const runRes = await callGitHub(sessionId, `/repos/${input.owner}/${input.repo}/actions/runs/${input.run_id}`);
+    const runRes = await callGG(sessionId, `/repos/${input.owner}/${input.repo}/actions/runs/${input.run_id}`);
     if (!runRes.ok || typeof runRes.data !== "object" || !runRes.data) {
-      return { structuredContent: { id: input.run_id, error: runRes.error ?? `HTTP_${runRes.status}` }, content: [{ type: "text", text: `GitHub workflow fetch failed: ${runRes.error ?? runRes.status}` }] };
+      return { structuredContent: { id: input.run_id, error: runRes.error ?? `HTTP_${runRes.status}` }, content: [{ type: "text", text: `GG workflow fetch failed: ${runRes.error ?? runRes.status}` }] };
     }
     const run = runRes.data as Record<string, any>;
-    const jobsRes = await callGitHub(sessionId, `/repos/${input.owner}/${input.repo}/actions/runs/${input.run_id}/jobs`);
+    const jobsRes = await callGG(sessionId, `/repos/${input.owner}/${input.repo}/actions/runs/${input.run_id}/jobs`);
     const jobs = jobsRes.ok && typeof jobsRes.data === "object" && jobsRes.data && Array.isArray((jobsRes.data as Record<string, any>).jobs)
       ? (jobsRes.data as Record<string, any>).jobs.map((job: any) => ({ id: job.id, name: job.name, status: job.status, conclusion: job.conclusion, started_at: job.started_at, completed_at: job.completed_at }))
       : [];
