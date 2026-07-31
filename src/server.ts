@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v3";
 import { sampleState } from "./sample-state.js";
 import crypto from "node:crypto";
+import { getOAuthConfig } from "./auth-config.js";
 
 const TEMPLATE_URI = "ui://dw-super/cockpit.html";
 
@@ -10,7 +11,6 @@ const server = new McpServer(
   { capabilities: { tools: {}, resources: {} } }
 );
 
-// OAuth Configuration & State Management
 type OAuthSessionState = {
   accessToken: string;
   refreshToken?: string;
@@ -19,29 +19,37 @@ type OAuthSessionState = {
   workspaceId: string;
 };
 
-// Simplified storage for now; will be replaced by secure encrypted store
 const oauthSessions = new Map<string, OAuthSessionState>();
 const activeSession = new Map<string, string>(); // session cookie ID -> sessionId
+
+const oauthConfig = getOAuthConfig();
 
 // GET /api/auth/gg/authorize
 export const authorizeGG = async () => {
   const state = crypto.randomBytes(16).toString("hex");
-  const authUrl = `${process.env.GG_OAUTH_AUTHORIZATION_URL}?client_id=${process.env.GG_OAUTH_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GG_OAUTH_REDIRECT_URI!)}&response_type=code&scope=${process.env.GG_OAUTH_SCOPES}&state=${state}`;
-  return { url: authUrl, state };
+  const authUrl = new URL(oauthConfig.authorizationUrl);
+  authUrl.searchParams.set("client_id", oauthConfig.clientId);
+  authUrl.searchParams.set("redirect_uri", oauthConfig.redirectUri);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", oauthConfig.scopes);
+  authUrl.searchParams.set("state", state);
+  authUrl.searchParams.set("code_challenge", crypto.createHash("sha256").update(state).digest("base64url"));
+  authUrl.searchParams.set("code_challenge_method", "S256");
+  return { url: authUrl.toString(), state };
 };
 
 // GET /api/auth/gg/callback
 export const callbackGG = async (code: string, state: string, storedState: string) => {
   if (state !== storedState) throw new Error("Invalid state");
   
-  const tokenResponse = await fetch(process.env.GG_OAUTH_TOKEN_URL!, {
+  const tokenResponse = await fetch(oauthConfig.tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_id: process.env.GG_OAUTH_CLIENT_ID,
-      client_secret: process.env.GG_OAUTH_CLIENT_SECRET,
+      client_id: oauthConfig.clientId,
+      client_secret: oauthConfig.clientSecret,
       code,
-      redirect_uri: process.env.GG_OAUTH_REDIRECT_URI,
+      redirect_uri: oauthConfig.redirectUri,
       grant_type: "authorization_code"
     })
   });
@@ -64,8 +72,8 @@ export const callbackGG = async (code: string, state: string, storedState: strin
 // POST /api/auth/gg/logout
 export const logoutGG = async (sessionId: string) => {
   const session = oauthSessions.get(sessionId);
-  if (session && process.env.GG_OAUTH_REVOCATION_URL) {
-     await fetch(process.env.GG_OAUTH_REVOCATION_URL, {
+  if (session && oauthConfig.revocationUrl) {
+     await fetch(oauthConfig.revocationUrl, {
         method: "POST",
         body: JSON.stringify({ token: session.accessToken })
      });
@@ -90,12 +98,12 @@ async function callGG(sessionId: string, path: string): Promise<{ ok: boolean; s
 
   // Check token expiry (refresh 60s early)
   if (session.expiresAt && Date.now() > session.expiresAt - 60000 && session.refreshToken) {
-    const refreshResponse = await fetch(process.env.GG_OAUTH_TOKEN_URL!, {
+    const refreshResponse = await fetch(oauthConfig.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client_id: process.env.GG_OAUTH_CLIENT_ID,
-        client_secret: process.env.GG_OAUTH_CLIENT_SECRET,
+        client_id: oauthConfig.clientId,
+        client_secret: oauthConfig.clientSecret,
         refresh_token: session.refreshToken,
         grant_type: "refresh_token"
       })
@@ -1069,4 +1077,3 @@ server.registerTool(
 );
 
 export default server;
-

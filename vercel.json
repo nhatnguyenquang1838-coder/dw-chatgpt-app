@@ -6,6 +6,10 @@
       "maxDuration": 15,
       "memory": 1024,
       "includeFiles": "widget/**"
+    },
+    "api/auth/gg/*.ts": {
+      "maxDuration": 15,
+      "memory": 1024
     }
   },
   "git": {
@@ -16,22 +20,10 @@
       "source": "/mcp",
       "destination": "/api"
     },
-    {
-      "source": "/api/auth/gg/authorize",
-      "destination": "/api/auth/gg/authorize"
-    },
-    {
-      "source": "/api/auth/gg/callback",
-      "destination": "/api/auth/gg/callback"
-    },
-    {
-      "source": "/api/auth/gg/session",
-      "destination": "/api/auth/gg/session"
-    },
-    {
-      "source": "/api/auth/gg/logout",
-      "destination": "/api/auth/gg/logout"
-    }
+    { "source": "/api/auth/gg/authorize", "destination": "/api/auth/gg/authorize" },
+    { "source": "/api/auth/gg/callback", "destination": "/api/auth/gg/callback" },
+    { "source": "/api/auth/gg/session", "destination": "/api/auth/gg/session" },
+    { "source": "/api/auth/gg/logout", "destination": "/api/auth/gg/logout" }
   ],
   "headers": [
     {
