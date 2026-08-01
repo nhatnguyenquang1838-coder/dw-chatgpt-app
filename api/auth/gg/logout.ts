@@ -1,22 +1,20 @@
-import { getSession } from "./callback.js";
+import { clearCookie, getOAuthConfig, readCookie, usesSecureCookies } from "../../../src/auth-config.js";
+import { revokeOAuthSession } from "../../../src/gg-oauth-store.js";
 
 export default async function handler(req: any, res: any): Promise<void> {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+    res.setHeader("Allow", "POST");
+    res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
     return;
   }
-
-  const sessionId = req.headers.cookie?.split(";").map((part: string) => part.trim()).find((part: string) => part.startsWith("gg_session_id="))?.slice("gg_session_id=".length);
-  const session = sessionId ? getSession(decodeURIComponent(sessionId)) : null;
-
-  if (session) {
-    // Invalidate by clearing the cookie-backed session reference.
-    // Provider revocation can be added once the final GG/Supabase revocation endpoint is confirmed.
+  const config = getOAuthConfig();
+  const sessionId = readCookie(req.headers.cookie, config.sessionCookieName);
+  if (sessionId) {
+    await revokeOAuthSession(sessionId).catch((error) => {
+      console.warn("GG OAuth logout revocation failed", error instanceof Error ? error.message : "unknown");
+    });
   }
-
-  res.setHeader("Set-Cookie", [
-    "gg_session_id=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
-  ]);
-
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Set-Cookie", clearCookie(config.sessionCookieName, usesSecureCookies(config.appBaseUrl)));
   res.status(200).json({ success: true });
 }
