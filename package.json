@@ -1,6 +1,6 @@
 {
   "name": "dw-super-chatgpt-app",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Stateless GG UI bridge for ChatGPT Apps SDK",
   "type": "module",
   "private": true,
