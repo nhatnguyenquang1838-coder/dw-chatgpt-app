@@ -1,19 +1,18 @@
 {
   "name": "dw-super-chatgpt-app",
-  "version": "1.0.0",
-  "description": "DW SUPER Governance Cockpit for ChatGPT Apps SDK",
+  "version": "2.0.0",
+  "description": "Stateless GG UI bridge for ChatGPT Apps SDK",
   "type": "module",
   "private": true,
   "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "preview": "python3 -m http.server 8787 -d public"
+    "validate:bridge": "node scripts/validate-bridge.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.16.0",
     "@modelcontextprotocol/ext-apps": "^0.1.0",
-    "@supabase/supabase-js": "^2.56.0",
+    "@modelcontextprotocol/sdk": "^1.16.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
