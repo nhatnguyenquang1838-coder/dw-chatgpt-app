@@ -4,12 +4,12 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/server.ts", import.meta.url), "utf8");
 
 for (const required of [
-  'server.registerTool(\n  "render"',
-  'server.registerTool(\n  "emit_action"',
+  'server.registerTool("render"',
+  'server.registerTool("emit_action"',
   'structuredContent: { payload }',
   'structuredContent: input',
   'window.openai?.toolOutput',
-  'openai.callTool("emit_action", args)'
+  'bridge.callTool("emit_action", args)'
 ]) {
   assert.ok(source.includes(required), `missing required bridge behavior: ${required}`);
 }
