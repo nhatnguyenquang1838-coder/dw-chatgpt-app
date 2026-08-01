@@ -8,12 +8,12 @@
     "dev": "tsx src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
     "preview": "python3 -m http.server 8787 -d public"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.16.0",
     "@modelcontextprotocol/ext-apps": "^0.1.0",
-    "@supabase/supabase-js": "^2.56.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
