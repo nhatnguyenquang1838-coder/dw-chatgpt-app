@@ -8,7 +8,7 @@ const server = new McpServer(
   { capabilities: { tools: {}, resources: {} } }
 );
 
-type RenderInput = { payload: unknown };
+type RenderInput = { payload?: unknown };
 type UiAction = { view_id: string; task_id: string; gate: string; action: string };
 
 const actionSchema = z.object({
