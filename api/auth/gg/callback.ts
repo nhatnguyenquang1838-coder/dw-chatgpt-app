@@ -54,8 +54,8 @@ export default async function handler(req: any, res: any): Promise<void> {
       clearCookie("gg_oauth_return_to", secure)
     ]);
     res.redirect(303, new URL(storedState.returnTo, config.appBaseUrl).toString());
-  } catch (callbackError) {
-    console.error("GG OAuth callback failed", callbackError instanceof Error ? callbackError.message : "unknown");
+  } catch {
+    console.error("GG OAuth callback failed", "GG_OAUTH_EXCHANGE_FAILED");
     res.status(502).json({ error: "GG_OAUTH_EXCHANGE_FAILED" });
   }
 }
