@@ -1,69 +1,61 @@
-import { createClient } from "@supabase/supabase-js";
-import { consumeState } from "./authorize.js";
-import { getOAuthConfig, isSafeReturnPath } from "../../../src/auth-config.js";
-
-const sessions = new Map<string, { userId: string; displayName: string; scopes: string[]; expiresAt: string }>();
-
-function getCookieValue(cookieHeader: string | undefined, name: string): string | undefined {
-  if (!cookieHeader) return undefined;
-  const match = cookieHeader.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
-}
+import {
+  assertServerOAuthConfig,
+  clearCookie,
+  constantTimeEqual,
+  readCookie,
+  serializeCookie,
+  usesSecureCookies
+} from "../../../src/auth-config.js";
+import {
+  consumeOAuthState,
+  createOAuthSession,
+  exchangeAuthorizationCode
+} from "../../../src/gg-oauth-store.js";
 
 export default async function handler(req: any, res: any): Promise<void> {
   if (req.method !== "GET") {
-    res.status(405).json({ error: "Method not allowed" });
+    res.setHeader("Allow", "GET");
+    res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
     return;
   }
-
-  const { code, state, error, error_description, next } = req.query ?? {};
-  const returnTo = isSafeReturnPath(next as string | null) ? (next as string) : "/";
-
+  const { code, state, error } = req.query ?? {};
   if (error) {
-    res.status(400).json({ error: String(error), error_description: String(error_description || "OAuth denied") });
+    res.status(400).json({ error: "GG_OAUTH_DENIED" });
     return;
   }
-
   if (typeof code !== "string" || typeof state !== "string") {
-    res.status(400).json({ error: "Missing authorization code or state" });
+    res.status(400).json({ error: "GG_OAUTH_CALLBACK_INVALID" });
     return;
   }
-
-  const entry = consumeState(state);
-  const cookieState = getCookieValue(req.headers.cookie, "gg_oauth_state");
-  const verifier = getCookieValue(req.headers.cookie, "gg_oauth_verifier");
-  if (!entry || cookieState !== state || !verifier) {
-    res.status(400).json({ error: "Invalid or expired OAuth state" });
-    return;
+  try {
+    const config = assertServerOAuthConfig();
+    const cookieState = readCookie(req.headers.cookie, "gg_oauth_state");
+    const verifier = readCookie(req.headers.cookie, "gg_oauth_verifier");
+    if (!cookieState || !verifier || !constantTimeEqual(cookieState, state)) {
+      res.status(400).json({ error: "GG_OAUTH_STATE_INVALID" });
+      return;
+    }
+    const storedState = await consumeOAuthState(state);
+    if (!storedState) {
+      res.status(400).json({ error: "GG_OAUTH_STATE_EXPIRED_OR_REPLAYED" });
+      return;
+    }
+    const tokens = await exchangeAuthorizationCode(code, verifier);
+    const session = await createOAuthSession(tokens);
+    const secure = usesSecureCookies(config.appBaseUrl);
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Set-Cookie", [
+      serializeCookie(config.sessionCookieName, session.sessionId, {
+        maxAge: config.sessionMaxAgeSeconds,
+        secure
+      }),
+      clearCookie("gg_oauth_state", secure),
+      clearCookie("gg_oauth_verifier", secure),
+      clearCookie("gg_oauth_return_to", secure)
+    ]);
+    res.redirect(303, new URL(storedState.returnTo, config.appBaseUrl).toString());
+  } catch {
+    console.error("GG OAuth callback failed", "GG_OAUTH_EXCHANGE_FAILED");
+    res.status(502).json({ error: "GG_OAUTH_EXCHANGE_FAILED" });
   }
-
-  const config = getOAuthConfig();
-  const supabase = createClient(config.supabaseUrl || "", config.supabaseAnonKey || "");
-  const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-  if (exchangeError || !data.session?.user) {
-    res.status(400).json({ error: "Failed to exchange OAuth code" });
-    return;
-  }
-
-  const sessionId = crypto.randomUUID();
-  sessions.set(sessionId, {
-    userId: data.session.user.id,
-    displayName: data.session.user.user_metadata?.full_name || data.session.user.email || "GG User",
-    scopes: data.session.user.app_metadata?.provider ? [String(data.session.user.app_metadata.provider)] : [],
-    expiresAt: data.session.expires_at ? new Date(data.session.expires_at * 1000).toISOString() : new Date(Date.now() + 3600 * 1000).toISOString()
-  });
-
-  res.setHeader("Set-Cookie", [
-    `gg_session_id=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`,
-    `gg_oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
-    `gg_oauth_verifier=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
-    `gg_oauth_return_to=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
-  ]);
-
-  const origin = config.appBaseUrl || `${req.headers["x-forwarded-proto"] || "https"}://${req.headers["x-forwarded-host"] || req.headers.host}`;
-  res.redirect(303, `${origin}${returnTo}`);
-}
-
-export function getSession(sessionId: string) {
-  return sessions.get(sessionId) || null;
 }
